@@ -479,56 +479,105 @@
 
   <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 /* =========================================================
-   DATA LAYER
-   Currently backed by localStorage. Written async so it can
-   be swapped for real backend fetch() calls later without
-   touching the rest of the app.
+   SUPABASE CONFIG
+   Project: ATZYTradingJournal. The publishable key is safe
+   to expose in client-side code — access is controlled by
+   Postgres Row Level Security policies on the trades table
+   and the trade-screenshots storage bucket (both currently
+   set to allow the anon role full access, since this is a
+   single-user personal app).
    ========================================================= */
-const STORAGE_KEY = 'xauusd_journal_trades_v1';
+const SUPABASE_URL = 'https://ysssukktqbajjfvqbeel.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_YFHoVBFEH1ZJQlpV5zMP2Q_qYCQnwr6';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SCREENSHOT_BUCKET = 'trade-screenshots';
 
-function _readAll(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  }catch(e){ return []; }
+/* =========================================================
+   DATA LAYER
+   Backed by Supabase (Postgres + Storage) so trades and
+   images sync across every device that opens this page.
+   ========================================================= */
+function dbRowToTrade(r){
+  return {
+    id: r.id,
+    date: r.date,
+    pair: r.pair,
+    direction: r.direction,
+    result: r.result,
+    rrExited: r.rr_exited,
+    rrReached: r.rr_reached,
+    confidence: r.confidence,
+    quality: r.quality,
+    grade: r.grade,
+    h1: r.h1_context,
+    m15: r.m15_area,
+    m5: r.m5_confirmation,
+    m1: r.m1_trigger,
+    ruleFollowed: r.rule_followed,
+    lesson: r.lesson,
+    mistake: r.mistake,
+    before: r.before_url,
+    after: r.after_url,
+    createdAt: r.created_at,
+  };
 }
-function _writeAll(trades){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(trades));
+function tradeToDbRow(t){
+  return {
+    date: t.date,
+    pair: t.pair,
+    direction: t.direction,
+    result: t.result,
+    rr_exited: (t.rrExited === '' || t.rrExited === undefined || t.rrExited === null) ? null : Number(t.rrExited),
+    rr_reached: (t.rrReached === '' || t.rrReached === undefined || t.rrReached === null) ? null : Number(t.rrReached),
+    confidence: t.confidence ? Number(t.confidence) : null,
+    quality: t.quality ? Number(t.quality) : null,
+    grade: t.grade || null,
+    h1_context: t.h1 || null,
+    m15_area: t.m15 || null,
+    m5_confirmation: t.m5 || null,
+    m1_trigger: t.m1 || null,
+    rule_followed: t.ruleFollowed || null,
+    lesson: t.lesson || null,
+    mistake: t.mistake || null,
+    before_url: t.before || null,
+    after_url: t.after || null,
+  };
 }
 
 async function getTrades(){
-  const trades = _readAll();
-  return trades.slice().sort((a,b)=> new Date(b.date) - new Date(a.date) || (b.createdAt - a.createdAt));
+  const { data, error } = await sb
+    .from('trades')
+    .select('*')
+    .order('date', { ascending:false })
+    .order('created_at', { ascending:false });
+  if(error){ console.error(error); showToast('Failed to load trades'); return []; }
+  return data.map(dbRowToTrade);
 }
 async function addTrade(trade){
-  const trades = _readAll();
-  trade.id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()));
-  trade.createdAt = Date.now();
-  trades.push(trade);
-  _writeAll(trades);
-  return trade;
+  const { data, error } = await sb.from('trades').insert(tradeToDbRow(trade)).select().single();
+  if(error){ console.error(error); showToast('Failed to save trade'); throw error; }
+  return dbRowToTrade(data);
 }
-async function updateTrade(id, data){
-  const trades = _readAll();
-  const idx = trades.findIndex(t=>t.id===id);
-  if(idx===-1) return null;
-  trades[idx] = {...trades[idx], ...data};
-  _writeAll(trades);
-  return trades[idx];
+async function updateTrade(id, trade){
+  const { data, error } = await sb.from('trades').update(tradeToDbRow(trade)).eq('id', id).select().single();
+  if(error){ console.error(error); showToast('Failed to update trade'); throw error; }
+  return dbRowToTrade(data);
 }
 async function deleteTrade(id){
-  const trades = _readAll().filter(t=>t.id!==id);
-  _writeAll(trades);
+  const { error } = await sb.from('trades').delete().eq('id', id);
+  if(error){ console.error(error); showToast('Failed to delete trade'); throw error; }
 }
 
 /* =========================================================
-   IMAGE COMPRESSION
-   Resizes to maxWidth and re-encodes as JPEG to keep storage
-   small. Returns a base64 data URL.
+   IMAGE COMPRESSION + UPLOAD
+   Resizes to maxWidth and re-encodes as JPEG client-side to
+   keep uploads small, then stores the file in Supabase
+   Storage and returns its public URL.
    ========================================================= */
-function compressImage(file, maxWidth=1200, quality=0.72){
+function compressImageToBlob(file, maxWidth=1200, quality=0.72){
   return new Promise((resolve, reject)=>{
     if(!file){ resolve(null); return; }
     const reader = new FileReader();
@@ -544,7 +593,7 @@ function compressImage(file, maxWidth=1200, quality=0.72){
         canvas.width = width; canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        canvas.toBlob(blob => resolve(blob), 'image/jpeg', quality);
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -554,13 +603,24 @@ function compressImage(file, maxWidth=1200, quality=0.72){
   });
 }
 
+async function uploadScreenshot(blob){
+  if(!blob) return null;
+  const path = `${crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random())}.jpg`;
+  const { error } = await sb.storage.from(SCREENSHOT_BUCKET).upload(path, blob, { contentType:'image/jpeg', upsert:false });
+  if(error){ console.error(error); showToast('Image upload failed'); throw error; }
+  const { data } = sb.storage.from(SCREENSHOT_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
 /* =========================================================
    STATE
    ========================================================= */
 let currentTrades = [];
 let editingId = null;
-let pendingBeforeImg = null; // base64, set on file input change
-let pendingAfterImg = null;
+let pendingBeforeBlob = null; // new compressed image blob, set on file input change
+let pendingAfterBlob = null;
+let existingBeforeUrl = null; // already-uploaded URL when editing, kept unless replaced
+let existingAfterUrl = null;
 let openRowId = null;
 
 /* =========================================================
@@ -775,17 +835,17 @@ document.querySelectorAll('#f_grade .grade-btn').forEach(btn=>{
 document.getElementById('f_before').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   if(!file) return;
-  pendingBeforeImg = await compressImage(file);
+  pendingBeforeBlob = await compressImageToBlob(file);
   const prev = document.getElementById('beforePreview');
-  prev.src = pendingBeforeImg; prev.style.display = 'block';
+  prev.src = URL.createObjectURL(pendingBeforeBlob); prev.style.display = 'block';
   document.getElementById('beforeLabel').textContent = 'Image selected — tap to replace';
 });
 document.getElementById('f_after').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   if(!file) return;
-  pendingAfterImg = await compressImage(file);
+  pendingAfterBlob = await compressImageToBlob(file);
   const prev = document.getElementById('afterPreview');
-  prev.src = pendingAfterImg; prev.style.display = 'block';
+  prev.src = URL.createObjectURL(pendingAfterBlob); prev.style.display = 'block';
   document.getElementById('afterLabel').textContent = 'Image selected — tap to replace';
 });
 
@@ -794,7 +854,8 @@ function resetForm(){
   document.getElementById('f_pair').value = 'XAUUSD';
   document.getElementById('f_date').value = new Date().toISOString().slice(0,10);
   editingId = null;
-  pendingBeforeImg = null; pendingAfterImg = null;
+  pendingBeforeBlob = null; pendingAfterBlob = null;
+  existingBeforeUrl = null; existingAfterUrl = null;
   Object.keys(state).forEach(k=> state[k].value='');
   document.querySelectorAll('.toggle-btn').forEach(b=> b.className='toggle-btn');
   document.querySelectorAll('#f_confidence button').forEach(b=> b.classList.remove('on'));
@@ -856,12 +917,12 @@ async function startEdit(id){
     document.querySelectorAll('#f_grade .grade-btn').forEach(b=> b.className = 'grade-btn' + (b.dataset.val===t.grade ? ` sel-${t.grade}` : ''));
   }
   if(t.before){
-    pendingBeforeImg = t.before;
+    existingBeforeUrl = t.before;
     const prev = document.getElementById('beforePreview'); prev.src = t.before; prev.style.display='block';
     document.getElementById('beforeLabel').textContent = 'Image selected — tap to replace';
   }
   if(t.after){
-    pendingAfterImg = t.after;
+    existingAfterUrl = t.after;
     const prev = document.getElementById('afterPreview'); prev.src = t.after; prev.style.display='block';
     document.getElementById('afterLabel').textContent = 'Image selected — tap to replace';
   }
@@ -876,47 +937,66 @@ async function confirmDelete(id){
   showToast('Trade deleted');
 }
 
+const saveBtn = form.querySelector('button[type=submit]');
+
 form.addEventListener('submit', async (e)=>{
   e.preventDefault();
   if(!state.direction.value){ alert('Select a direction (Buy/Sell).'); return; }
   if(!state.result.value){ alert('Select a result (Win/Loss/Breakeven).'); return; }
 
-  const payload = {
-    date: document.getElementById('f_date').value,
-    pair: document.getElementById('f_pair').value.trim() || 'XAUUSD',
-    direction: state.direction.value,
-    result: state.result.value,
-    rrExited: document.getElementById('f_rrExited').value,
-    rrReached: document.getElementById('f_rrReached').value,
-    confidence: state.confidence.value,
-    quality: state.quality.value,
-    grade: state.grade.value,
-    h1: document.getElementById('f_h1').value,
-    m15: document.getElementById('f_m15').value,
-    m5: document.getElementById('f_m5').value,
-    m1: document.getElementById('f_m1').value,
-    ruleFollowed: state.ruleFollowed.value,
-    lesson: document.getElementById('f_lesson').value,
-    mistake: document.getElementById('f_mistake').value,
-    before: pendingBeforeImg,
-    after: pendingAfterImg,
-  };
+  const originalBtnText = saveBtn.textContent;
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
 
-  if(editingId){
-    await updateTrade(editingId, payload);
-    showToast('Trade updated');
-  }else{
-    await addTrade(payload);
-    showToast('Trade saved');
+  try{
+    let beforeUrl = existingBeforeUrl;
+    let afterUrl = existingAfterUrl;
+    if(pendingBeforeBlob) beforeUrl = await uploadScreenshot(pendingBeforeBlob);
+    if(pendingAfterBlob) afterUrl = await uploadScreenshot(pendingAfterBlob);
+
+    const payload = {
+      date: document.getElementById('f_date').value,
+      pair: document.getElementById('f_pair').value.trim() || 'XAUUSD',
+      direction: state.direction.value,
+      result: state.result.value,
+      rrExited: document.getElementById('f_rrExited').value,
+      rrReached: document.getElementById('f_rrReached').value,
+      confidence: state.confidence.value,
+      quality: state.quality.value,
+      grade: state.grade.value,
+      h1: document.getElementById('f_h1').value,
+      m15: document.getElementById('f_m15').value,
+      m5: document.getElementById('f_m5').value,
+      m1: document.getElementById('f_m1').value,
+      ruleFollowed: state.ruleFollowed.value,
+      lesson: document.getElementById('f_lesson').value,
+      mistake: document.getElementById('f_mistake').value,
+      before: beforeUrl,
+      after: afterUrl,
+    };
+
+    if(editingId){
+      await updateTrade(editingId, payload);
+      showToast('Trade updated');
+    }else{
+      await addTrade(payload);
+      showToast('Trade saved');
+    }
+    closeModal();
+    await refresh();
+  }catch(err){
+    // errors already surfaced via showToast in the data/upload layer
+  }finally{
+    saveBtn.disabled = false;
+    saveBtn.textContent = originalBtnText;
   }
-  closeModal();
-  await refresh();
 });
 
 /* =========================================================
    INIT
    ========================================================= */
 document.getElementById('f_date').value = new Date().toISOString().slice(0,10);
+document.getElementById('tradeList').innerHTML = '<div class="empty-state">Loading trades…</div>';
 refresh();
 </script>
 </body>
