@@ -626,6 +626,12 @@ function tradeToDbRow(t){
     duration_minutes: (t.durationMinutes === '' || t.durationMinutes === undefined || t.durationMinutes === null) ? null : Number(t.durationMinutes),
   };
 }
+function formatDateDMY(iso){
+  if(!iso) return '—';
+  const [y,m,d] = iso.split('-');
+  if(!y||!m||!d) return iso;
+  return `${d}/${m}/${y}`;
+}
 function formatDuration(mins){
   if(mins === null || mins === undefined || mins === '') return '—';
   mins = Number(mins);
@@ -803,7 +809,7 @@ function renderTradeList(){
     return `
     <div class="trade-row ${isOpen?'open':''}" data-id="${t.id}">
       <div class="trade-row-main" data-toggle="${t.id}">
-        <div class="tc">${esc(t.date)}</div>
+        <div class="tc">${formatDateDMY(t.date)}</div>
         <div class="tc dim hide-sm">${esc(t.pair)}</div>
         <div class="tc"><span class="${pillClass('direction', t.direction)}">${esc(t.direction)}</span></div>
         <div class="tc hide-sm"><span class="${pillClass('result', t.result)}">${esc(t.result)}</span></div>
