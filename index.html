@@ -458,7 +458,7 @@
           </div>
 
           <div class="field">
-            <label>Grade</label>
+            <label>Setup Grade</label>
             <div class="grade-group" id="f_grade">
               <button type="button" class="grade-btn" data-val="A">A</button>
               <button type="button" class="grade-btn" data-val="B">B</button>
@@ -702,6 +702,19 @@ async function uploadScreenshot(blob){
   return data.publicUrl;
 }
 
+// Frees up storage: converts public URLs back to their bucket object paths and removes them.
+function storagePathFromUrl(url){
+  const marker = `/object/public/${SCREENSHOT_BUCKET}/`;
+  const idx = url.indexOf(marker);
+  return idx === -1 ? null : url.slice(idx + marker.length);
+}
+async function deleteScreenshotsByUrl(urls){
+  const paths = (urls || []).map(storagePathFromUrl).filter(Boolean);
+  if(!paths.length) return;
+  const { error } = await sb.storage.from(SCREENSHOT_BUCKET).remove(paths);
+  if(error) console.error('Failed to remove storage objects', error);
+}
+
 /* =========================================================
    STATE
    ========================================================= */
@@ -713,6 +726,7 @@ let pendingBeforeBlobs = []; // newly-selected compressed image blobs not yet up
 let pendingAfterBlobs = [];
 let existingBeforeUrls = []; // already-uploaded URLs when editing, kept unless removed
 let existingAfterUrls = [];
+let removedExistingUrls = []; // images detached during edit, deleted from storage only after a successful save
 let openRowId = null;
 
 /* =========================================================
@@ -1009,9 +1023,9 @@ function renderAfterThumbs(){
   renderThumbsInto('afterThumbs', existingAfterUrls, pendingAfterBlobs, 'removeExistingAfter', 'removePendingAfter');
   updateUploadLabel('afterLabel', existingAfterUrls, pendingAfterBlobs);
 }
-function removeExistingBefore(i){ existingBeforeUrls.splice(i,1); renderBeforeThumbs(); }
+function removeExistingBefore(i){ removedExistingUrls.push(existingBeforeUrls[i]); existingBeforeUrls.splice(i,1); renderBeforeThumbs(); }
 function removePendingBefore(i){ pendingBeforeBlobs.splice(i,1); renderBeforeThumbs(); }
-function removeExistingAfter(i){ existingAfterUrls.splice(i,1); renderAfterThumbs(); }
+function removeExistingAfter(i){ removedExistingUrls.push(existingAfterUrls[i]); existingAfterUrls.splice(i,1); renderAfterThumbs(); }
 function removePendingAfter(i){ pendingAfterBlobs.splice(i,1); renderAfterThumbs(); }
 
 document.getElementById('f_before').addEventListener('change', async (e)=>{
@@ -1040,6 +1054,7 @@ function resetForm(){
   editingId = null;
   pendingBeforeBlobs = []; pendingAfterBlobs = [];
   existingBeforeUrls = []; existingAfterUrls = [];
+  removedExistingUrls = [];
   Object.keys(state).forEach(k=> state[k].value='');
   document.querySelectorAll('.toggle-btn').forEach(b=> b.className='toggle-btn');
   document.querySelectorAll('#f_confidence button').forEach(b=> b.classList.remove('on'));
@@ -1116,7 +1131,13 @@ async function startEdit(id){
 }
 
 async function confirmDelete(id){
-  if(!confirm('Delete this trade? This cannot be undone.')) return;
+  if(!confirm('Delete this trade? This also removes its screenshots and cannot be undone.')) return;
+  const t = currentTrades.find(x=>x.id===id);
+  if(t){
+    const before = Array.isArray(t.before)?t.before:(t.before?[t.before]:[]);
+    const after = Array.isArray(t.after)?t.after:(t.after?[t.after]:[]);
+    await deleteScreenshotsByUrl([...before, ...after]);
+  }
   await deleteTrade(id);
   if(openRowId===id) openRowId=null;
   await refresh();
@@ -1176,6 +1197,7 @@ form.addEventListener('submit', async (e)=>{
       await addTrade(payload);
       showToast('Trade saved');
     }
+    if(removedExistingUrls.length) await deleteScreenshotsByUrl(removedExistingUrls);
     closeModal();
     await refresh();
   }catch(err){
