@@ -350,6 +350,11 @@
             </div>
           </div>
 
+          <div class="field">
+            <label>Session</label>
+            <input type="text" id="f_session" placeholder="e.g. London, New York, Asian">
+          </div>
+
           <div class="row2">
             <div class="field">
               <label>Direction</label>
@@ -426,11 +431,20 @@
             <textarea id="f_m1"></textarea>
           </div>
 
-          <div class="field">
-            <label>Rule Followed?</label>
-            <div class="toggle-group" id="f_ruleFollowed">
-              <button type="button" class="toggle-btn" data-val="Yes">Yes</button>
-              <button type="button" class="toggle-btn" data-val="No">No</button>
+          <div class="row2">
+            <div class="field">
+              <label>Rule Followed?</label>
+              <div class="toggle-group" id="f_ruleFollowed">
+                <button type="button" class="toggle-btn" data-val="Yes">Yes</button>
+                <button type="button" class="toggle-btn" data-val="No">No</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Good Trade?</label>
+              <div class="toggle-group" id="f_goodTrade">
+                <button type="button" class="toggle-btn" data-val="Yes">Yes</button>
+                <button type="button" class="toggle-btn" data-val="No">No</button>
+              </div>
             </div>
           </div>
 
@@ -441,6 +455,10 @@
           <div class="field">
             <label>Mistake</label>
             <textarea id="f_mistake"></textarea>
+          </div>
+          <div class="field">
+            <label>Coach's Notes</label>
+            <textarea id="f_coachNotes"></textarea>
           </div>
 
           <div class="row2">
@@ -522,6 +540,9 @@ function dbRowToTrade(r){
     before: r.before_url,
     after: r.after_url,
     createdAt: r.created_at,
+    session: r.session,
+    goodTrade: r.good_trade,
+    coachNotes: r.coach_notes,
   };
 }
 function tradeToDbRow(t){
@@ -544,14 +565,18 @@ function tradeToDbRow(t){
     mistake: t.mistake || null,
     before_url: t.before || null,
     after_url: t.after || null,
+    session: t.session || null,
+    good_trade: t.goodTrade || null,
+    coach_notes: t.coachNotes || null,
   };
 }
 
 async function getTrades(){
+  // Sorted purely by entry time (newest-entered first), so whatever
+  // you just logged always lands at the top regardless of its date.
   const { data, error } = await sb
     .from('trades')
     .select('*')
-    .order('date', { ascending:false })
     .order('created_at', { ascending:false });
   if(error){ console.error(error); showToast('Failed to load trades'); return []; }
   return data.map(dbRowToTrade);
@@ -711,10 +736,12 @@ function renderTradeList(){
       <div class="trade-detail">
         <div class="detail-meta">
           <span>Pair: <b>${esc(t.pair)}</b></span>
+          <span>Session: <b>${esc(t.session)||'—'}</b></span>
           <span>Confidence: <b>${esc(t.confidence)||'—'}/5</b></span>
           <span>Quality: <b class="stars">${starsStr(t.quality)}</b></span>
           <span>RR Reached: <b>${t.rrReached!==undefined&&t.rrReached!==''? Number(t.rrReached).toFixed(2):'—'}</b></span>
           <span>Rule Followed: <b>${esc(t.ruleFollowed)||'—'}</b></span>
+          <span>Good Trade: <b>${esc(t.goodTrade)||'—'}</b></span>
         </div>
         <div class="detail-grid">
           <div class="detail-block">
@@ -730,6 +757,9 @@ function renderTradeList(){
           </div>
           <div class="detail-block">
             <h4>Mistake</h4><p>${esc(t.mistake)||'—'}</p>
+          </div>
+          <div class="detail-block">
+            <h4>Coach's Notes</h4><p>${esc(t.coachNotes)||'—'}</p>
           </div>
         </div>
         <div class="shots">
@@ -806,11 +836,12 @@ function wireToggleGroup(groupId, hiddenState, activeMap){
   });
 }
 
-const state = { direction:{value:''}, result:{value:''}, ruleFollowed:{value:''}, confidence:{value:''}, quality:{value:''}, grade:{value:''} };
+const state = { direction:{value:''}, result:{value:''}, ruleFollowed:{value:''}, goodTrade:{value:''}, confidence:{value:''}, quality:{value:''}, grade:{value:''} };
 
 wireToggleGroup('f_direction', state.direction, directionActiveMap);
 wireToggleGroup('f_result', state.result, resultActiveMap);
 wireToggleGroup('f_ruleFollowed', state.ruleFollowed, ruleActiveMap);
+wireToggleGroup('f_goodTrade', state.goodTrade, ruleActiveMap);
 
 document.querySelectorAll('#f_confidence button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -866,6 +897,8 @@ function resetForm(){
   });
   document.getElementById('beforeLabel').textContent = 'Tap to upload image';
   document.getElementById('afterLabel').textContent = 'Tap to upload image';
+  document.getElementById('f_session').value = '';
+  document.getElementById('f_coachNotes').value = '';
 }
 
 function openModal(){
@@ -900,10 +933,13 @@ async function startEdit(id){
   document.getElementById('f_m1').value = t.m1 || '';
   document.getElementById('f_lesson').value = t.lesson || '';
   document.getElementById('f_mistake').value = t.mistake || '';
+  document.getElementById('f_session').value = t.session || '';
+  document.getElementById('f_coachNotes').value = t.coachNotes || '';
 
   if(t.direction){ state.direction.value = t.direction; setToggleGroup('f_direction', directionActiveMap, t.direction); }
   if(t.result){ state.result.value = t.result; setToggleGroup('f_result', resultActiveMap, t.result); }
   if(t.ruleFollowed){ state.ruleFollowed.value = t.ruleFollowed; setToggleGroup('f_ruleFollowed', ruleActiveMap, t.ruleFollowed); }
+  if(t.goodTrade){ state.goodTrade.value = t.goodTrade; setToggleGroup('f_goodTrade', ruleActiveMap, t.goodTrade); }
   if(t.confidence){
     state.confidence.value = t.confidence;
     document.querySelectorAll('#f_confidence button').forEach(b=> b.classList.toggle('on', b.dataset.val==String(t.confidence)));
@@ -969,8 +1005,11 @@ form.addEventListener('submit', async (e)=>{
       m5: document.getElementById('f_m5').value,
       m1: document.getElementById('f_m1').value,
       ruleFollowed: state.ruleFollowed.value,
+      goodTrade: state.goodTrade.value,
       lesson: document.getElementById('f_lesson').value,
       mistake: document.getElementById('f_mistake').value,
+      coachNotes: document.getElementById('f_coachNotes').value,
+      session: document.getElementById('f_session').value,
       before: beforeUrl,
       after: afterUrl,
     };
