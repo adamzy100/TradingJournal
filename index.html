@@ -248,6 +248,10 @@
     outline:none;transition:border-color .15s ease;
   }
   .field input[type=number]{font-family:var(--mono);}
+  input[type="date"]::-webkit-calendar-picker-indicator{
+    filter: invert(1) brightness(1.4);
+    cursor: pointer;
+  }
   .field input:focus, .field textarea:focus, .field select:focus{border-color:var(--gold);}
   .field textarea{resize:vertical;min-height:56px;font-family:var(--sans);}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
