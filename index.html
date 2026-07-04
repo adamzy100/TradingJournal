@@ -403,6 +403,14 @@
             </div>
           </div>
 
+          <div class="field">
+            <label>Duration</label>
+            <div style="display:flex;gap:8px;">
+              <input type="number" min="0" id="f_durHours" placeholder="Hrs" style="flex:1;">
+              <input type="number" min="0" max="59" id="f_durMins" placeholder="Mins" style="flex:1;">
+            </div>
+          </div>
+
           <div class="row2">
             <div class="field">
               <label>Actual RR Exited</label>
@@ -573,6 +581,7 @@ function dbRowToTrade(r){
     session: r.session,
     goodTrade: r.good_trade,
     coachNotes: r.coach_notes,
+    durationMinutes: r.duration_minutes,
   };
 }
 function tradeToDbRow(t){
@@ -598,7 +607,17 @@ function tradeToDbRow(t){
     session: t.session || null,
     good_trade: t.goodTrade || null,
     coach_notes: t.coachNotes || null,
+    duration_minutes: (t.durationMinutes === '' || t.durationMinutes === undefined || t.durationMinutes === null) ? null : Number(t.durationMinutes),
   };
+}
+function formatDuration(mins){
+  if(mins === null || mins === undefined || mins === '') return '—';
+  mins = Number(mins);
+  if(!mins && mins !== 0) return '—';
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  if(hrs > 0) return `${hrs} ${hrs===1?'hr':'hrs'} ${rem} mins`;
+  return `${rem} mins`;
 }
 
 async function getTrades(){
@@ -776,6 +795,7 @@ function renderTradeList(){
           <span>RR Reached: <b>${t.rrReached!==undefined&&t.rrReached!==''? Number(t.rrReached).toFixed(2):'—'}</b></span>
           <span>Rule Followed: <b>${esc(t.ruleFollowed)||'—'}</b></span>
           <span>Good Trade: <b>${esc(t.goodTrade)||'—'}</b></span>
+          <span>Duration: <b>${formatDuration(t.durationMinutes)}</b></span>
         </div>
         <div class="detail-grid">
           <div class="detail-block">
@@ -983,6 +1003,8 @@ function resetForm(){
   document.getElementById('afterLabel').textContent = 'Tap to upload image';
   document.getElementById('f_session').value = '';
   document.getElementById('f_coachNotes').value = '';
+  document.getElementById('f_durHours').value = '';
+  document.getElementById('f_durMins').value = '';
 }
 
 function openModal(){
@@ -1019,6 +1041,10 @@ async function startEdit(id){
   document.getElementById('f_mistake').value = t.mistake || '';
   document.getElementById('f_session').value = t.session || '';
   document.getElementById('f_coachNotes').value = t.coachNotes || '';
+  if(t.durationMinutes !== null && t.durationMinutes !== undefined && t.durationMinutes !== ''){
+    document.getElementById('f_durHours').value = Math.floor(Number(t.durationMinutes) / 60);
+    document.getElementById('f_durMins').value = Number(t.durationMinutes) % 60;
+  }
 
   if(t.direction){ state.direction.value = t.direction; setToggleGroup('f_direction', directionActiveMap, t.direction); }
   if(t.result){ state.result.value = t.result; setToggleGroup('f_result', resultActiveMap, t.result); }
@@ -1074,6 +1100,10 @@ form.addEventListener('submit', async (e)=>{
     if(pendingBeforeBlob) beforeUrl = await uploadScreenshot(pendingBeforeBlob);
     if(pendingAfterBlob) afterUrl = await uploadScreenshot(pendingAfterBlob);
 
+    const durHours = document.getElementById('f_durHours').value;
+    const durMins = document.getElementById('f_durMins').value;
+    const durationMinutes = (durHours === '' && durMins === '') ? null : (Number(durHours||0) * 60 + Number(durMins||0));
+
     const payload = {
       date: document.getElementById('f_date').value,
       pair: document.getElementById('f_pair').value.trim() || 'XAUUSD',
@@ -1094,6 +1124,7 @@ form.addEventListener('submit', async (e)=>{
       mistake: document.getElementById('f_mistake').value,
       coachNotes: document.getElementById('f_coachNotes').value,
       session: document.getElementById('f_session').value,
+      durationMinutes: durationMinutes,
       before: beforeUrl,
       after: afterUrl,
     };
