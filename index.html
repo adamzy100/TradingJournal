@@ -203,9 +203,10 @@
   }
   @media (max-width:640px){
     .detail-grid{grid-template-columns:1fr;}
-    .trade-row-main{grid-template-columns:88px 50px 1fr 34px;gap:6px;}
+    .trade-row-main{grid-template-columns:80px 44px 44px 1fr 32px;gap:5px;}
     .trade-row-main .tc.hide-sm{display:none;}
     .trade-row-main .tc{font-size:11.5px;white-space:nowrap;overflow:visible;}
+    .trade-row-main .pill{padding:3px 5px;font-size:10.5px;}
   }
   .detail-block h4{
     font-size:10.5px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-faint);
@@ -813,7 +814,7 @@ function renderTradeList(){
         <div class="tc">${formatDateDMY(t.date)}</div>
         <div class="tc dim hide-sm">${esc(t.pair)}</div>
         <div class="tc"><span class="${pillClass('direction', t.direction)}">${esc(t.direction)}</span></div>
-        <div class="tc hide-sm"><span class="${pillClass('result', t.result)}">${esc(t.result)}</span></div>
+        <div class="tc"><span class="${pillClass('result', t.result)}">${esc(t.result)}</span></div>
         <div class="tc">${t.rrExited!==undefined&&t.rrExited!==''? Number(t.rrExited).toFixed(2):'—'}</div>
         <div class="tc"><span class="grade-badge grade-${esc(t.grade)}">${esc(t.grade||'—')}</span></div>
         <div></div>
