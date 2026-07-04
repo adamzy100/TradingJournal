@@ -16,9 +16,9 @@
     --card:#1c1c24;
     --card-hover:#24242e;
     --border:#2e2e3a;
-    --text:#eae8e4;
-    --text-dim:#96939f;
-    --text-faint:#696772;
+    --text:#f5f4f2;
+    --text-dim:#c7c4d1;
+    --text-faint:#9d9aa8;
     --gold:#d4af37;
     --gold-bright:#f0c75e;
     --blue:#4a9eff;
@@ -248,6 +248,7 @@
     outline:none;transition:border-color .15s ease;
   }
   .field input[type=number]{font-family:var(--mono);}
+  .field input::placeholder, .field textarea::placeholder{color:var(--text-faint);opacity:1;}
   input[type="date"]::-webkit-calendar-picker-indicator{
     filter: invert(1) brightness(1.4);
     cursor: pointer;
@@ -302,7 +303,14 @@
   }
   .upload-box:hover{border-color:var(--gold);color:var(--text-dim);}
   .upload-box input{position:absolute;inset:0;opacity:0;cursor:pointer;}
-  .upload-preview{width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:8px;display:none;}
+  .thumb-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+  .thumb-item{position:relative;width:66px;height:66px;}
+  .thumb-item img{width:100%;height:100%;object-fit:cover;border-radius:8px;border:1px solid var(--border);}
+  .thumb-remove{
+    position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;
+    background:var(--red);color:#fff;border:none;font-size:12px;line-height:1;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;
+  }
 
   .modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:6px;}
 
@@ -495,7 +503,7 @@
             <textarea id="f_lesson"></textarea>
           </div>
           <div class="field">
-            <label>Mistake</label>
+            <label>Improvement for Next Trade</label>
             <textarea id="f_mistake"></textarea>
           </div>
           <div class="field">
@@ -505,20 +513,20 @@
 
           <div class="row2">
             <div class="field">
-              <label>Screenshot Before</label>
+              <label>Screenshots Before</label>
               <div class="upload-box" id="beforeBox">
-                <span id="beforeLabel">Tap to upload image</span>
-                <input type="file" accept="image/*" id="f_before">
+                <span id="beforeLabel">Tap to add image(s)</span>
+                <input type="file" accept="image/*" id="f_before" multiple>
               </div>
-              <img class="upload-preview" id="beforePreview">
+              <div class="thumb-grid" id="beforeThumbs"></div>
             </div>
             <div class="field">
-              <label>Screenshot After</label>
+              <label>Screenshots After</label>
               <div class="upload-box" id="afterBox">
-                <span id="afterLabel">Tap to upload image</span>
-                <input type="file" accept="image/*" id="f_after">
+                <span id="afterLabel">Tap to add image(s)</span>
+                <input type="file" accept="image/*" id="f_after" multiple>
               </div>
-              <img class="upload-preview" id="afterPreview">
+              <div class="thumb-grid" id="afterThumbs"></div>
             </div>
           </div>
 
@@ -697,10 +705,10 @@ let currentTrades = []; // full unfiltered set fetched from Supabase
 let displayedTrades = []; // currentTrades after the active date filter is applied
 let filterState = { mode: 'all', from: '', to: '' };
 let editingId = null;
-let pendingBeforeBlob = null; // new compressed image blob, set on file input change
-let pendingAfterBlob = null;
-let existingBeforeUrl = null; // already-uploaded URL when editing, kept unless replaced
-let existingAfterUrl = null;
+let pendingBeforeBlobs = []; // newly-selected compressed image blobs not yet uploaded
+let pendingAfterBlobs = [];
+let existingBeforeUrls = []; // already-uploaded URLs when editing, kept unless removed
+let existingAfterUrls = [];
 let openRowId = null;
 
 /* =========================================================
@@ -814,15 +822,15 @@ function renderTradeList(){
             <h4>One Lesson</h4><p>${esc(t.lesson)||'—'}</p>
           </div>
           <div class="detail-block">
-            <h4>Mistake</h4><p>${esc(t.mistake)||'—'}</p>
+            <h4>Improvement for Next Trade</h4><p>${esc(t.mistake)||'—'}</p>
           </div>
           <div class="detail-block">
             <h4>Coach's Notes</h4><p>${esc(t.coachNotes)||'—'}</p>
           </div>
         </div>
         <div class="shots">
-          ${t.before ? `<div class="shot-wrap"><span>Before</span><img class="shot-thumb" src="${t.before}" onclick="openLightbox('${t.before}')"></div>` : ''}
-          ${t.after ? `<div class="shot-wrap"><span>After</span><img class="shot-thumb" src="${t.after}" onclick="openLightbox('${t.after}')"></div>` : ''}
+          ${(Array.isArray(t.before)?t.before:(t.before?[t.before]:[])).map(url=>`<div class="shot-wrap"><span>Before</span><img class="shot-thumb" src="${url}" onclick="openLightbox('${url}')"></div>`).join('')}
+          ${(Array.isArray(t.after)?t.after:(t.after?[t.after]:[])).map(url=>`<div class="shot-wrap"><span>After</span><img class="shot-thumb" src="${url}" onclick="openLightbox('${url}')"></div>`).join('')}
         </div>
       </div>
     </div>`;
@@ -971,21 +979,53 @@ document.querySelectorAll('#f_grade .grade-btn').forEach(btn=>{
   });
 });
 
+function renderThumbsInto(containerId, existingUrls, pendingBlobs, removeExistingFn, removePendingFn){
+  const el = document.getElementById(containerId);
+  let html = '';
+  existingUrls.forEach((url, i)=>{
+    html += `<div class="thumb-item"><img src="${url}"><button type="button" class="thumb-remove" onclick="${removeExistingFn}(${i})">&times;</button></div>`;
+  });
+  pendingBlobs.forEach((blob, i)=>{
+    html += `<div class="thumb-item"><img src="${URL.createObjectURL(blob)}"><button type="button" class="thumb-remove" onclick="${removePendingFn}(${i})">&times;</button></div>`;
+  });
+  el.innerHTML = html;
+}
+function updateUploadLabel(labelId, existingUrls, pendingBlobs){
+  const total = existingUrls.length + pendingBlobs.length;
+  document.getElementById(labelId).textContent = total
+    ? `${total} image${total>1?'s':''} — tap to add more`
+    : 'Tap to add image(s)';
+}
+function renderBeforeThumbs(){
+  renderThumbsInto('beforeThumbs', existingBeforeUrls, pendingBeforeBlobs, 'removeExistingBefore', 'removePendingBefore');
+  updateUploadLabel('beforeLabel', existingBeforeUrls, pendingBeforeBlobs);
+}
+function renderAfterThumbs(){
+  renderThumbsInto('afterThumbs', existingAfterUrls, pendingAfterBlobs, 'removeExistingAfter', 'removePendingAfter');
+  updateUploadLabel('afterLabel', existingAfterUrls, pendingAfterBlobs);
+}
+function removeExistingBefore(i){ existingBeforeUrls.splice(i,1); renderBeforeThumbs(); }
+function removePendingBefore(i){ pendingBeforeBlobs.splice(i,1); renderBeforeThumbs(); }
+function removeExistingAfter(i){ existingAfterUrls.splice(i,1); renderAfterThumbs(); }
+function removePendingAfter(i){ pendingAfterBlobs.splice(i,1); renderAfterThumbs(); }
+
 document.getElementById('f_before').addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  pendingBeforeBlob = await compressImageToBlob(file);
-  const prev = document.getElementById('beforePreview');
-  prev.src = URL.createObjectURL(pendingBeforeBlob); prev.style.display = 'block';
-  document.getElementById('beforeLabel').textContent = 'Image selected — tap to replace';
+  const files = Array.from(e.target.files || []);
+  for(const file of files){
+    const blob = await compressImageToBlob(file);
+    if(blob) pendingBeforeBlobs.push(blob);
+  }
+  e.target.value = '';
+  renderBeforeThumbs();
 });
 document.getElementById('f_after').addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  pendingAfterBlob = await compressImageToBlob(file);
-  const prev = document.getElementById('afterPreview');
-  prev.src = URL.createObjectURL(pendingAfterBlob); prev.style.display = 'block';
-  document.getElementById('afterLabel').textContent = 'Image selected — tap to replace';
+  const files = Array.from(e.target.files || []);
+  for(const file of files){
+    const blob = await compressImageToBlob(file);
+    if(blob) pendingAfterBlobs.push(blob);
+  }
+  e.target.value = '';
+  renderAfterThumbs();
 });
 
 function resetForm(){
@@ -993,18 +1033,15 @@ function resetForm(){
   document.getElementById('f_pair').value = 'XAUUSD';
   document.getElementById('f_date').value = new Date().toISOString().slice(0,10);
   editingId = null;
-  pendingBeforeBlob = null; pendingAfterBlob = null;
-  existingBeforeUrl = null; existingAfterUrl = null;
+  pendingBeforeBlobs = []; pendingAfterBlobs = [];
+  existingBeforeUrls = []; existingAfterUrls = [];
   Object.keys(state).forEach(k=> state[k].value='');
   document.querySelectorAll('.toggle-btn').forEach(b=> b.className='toggle-btn');
   document.querySelectorAll('#f_confidence button').forEach(b=> b.classList.remove('on'));
   document.querySelectorAll('#f_quality span').forEach(s=> s.classList.remove('on'));
   document.querySelectorAll('#f_grade .grade-btn').forEach(b=> b.className='grade-btn');
-  ['beforePreview','afterPreview'].forEach(id=>{
-    const el = document.getElementById(id); el.src=''; el.style.display='none';
-  });
-  document.getElementById('beforeLabel').textContent = 'Tap to upload image';
-  document.getElementById('afterLabel').textContent = 'Tap to upload image';
+  renderBeforeThumbs();
+  renderAfterThumbs();
   document.getElementById('f_session').value = '';
   document.getElementById('f_coachNotes').value = '';
   document.getElementById('f_durHours').value = '';
@@ -1066,16 +1103,10 @@ async function startEdit(id){
     state.grade.value = t.grade;
     document.querySelectorAll('#f_grade .grade-btn').forEach(b=> b.className = 'grade-btn' + (b.dataset.val===t.grade ? ` sel-${t.grade}` : ''));
   }
-  if(t.before){
-    existingBeforeUrl = t.before;
-    const prev = document.getElementById('beforePreview'); prev.src = t.before; prev.style.display='block';
-    document.getElementById('beforeLabel').textContent = 'Image selected — tap to replace';
-  }
-  if(t.after){
-    existingAfterUrl = t.after;
-    const prev = document.getElementById('afterPreview'); prev.src = t.after; prev.style.display='block';
-    document.getElementById('afterLabel').textContent = 'Image selected — tap to replace';
-  }
+  existingBeforeUrls = Array.isArray(t.before) ? t.before.slice() : (t.before ? [t.before] : []);
+  existingAfterUrls = Array.isArray(t.after) ? t.after.slice() : (t.after ? [t.after] : []);
+  renderBeforeThumbs();
+  renderAfterThumbs();
   openModal();
 }
 
@@ -1099,10 +1130,10 @@ form.addEventListener('submit', async (e)=>{
   saveBtn.textContent = 'Saving...';
 
   try{
-    let beforeUrl = existingBeforeUrl;
-    let afterUrl = existingAfterUrl;
-    if(pendingBeforeBlob) beforeUrl = await uploadScreenshot(pendingBeforeBlob);
-    if(pendingAfterBlob) afterUrl = await uploadScreenshot(pendingAfterBlob);
+    const beforeUrls = existingBeforeUrls.slice();
+    for(const blob of pendingBeforeBlobs){ beforeUrls.push(await uploadScreenshot(blob)); }
+    const afterUrls = existingAfterUrls.slice();
+    for(const blob of pendingAfterBlobs){ afterUrls.push(await uploadScreenshot(blob)); }
 
     const durHours = document.getElementById('f_durHours').value;
     const durMins = document.getElementById('f_durMins').value;
@@ -1129,8 +1160,8 @@ form.addEventListener('submit', async (e)=>{
       coachNotes: document.getElementById('f_coachNotes').value,
       session: document.getElementById('f_session').value,
       durationMinutes: durationMinutes,
-      before: beforeUrl,
-      after: afterUrl,
+      before: beforeUrls.length ? beforeUrls : null,
+      after: afterUrls.length ? afterUrls : null,
     };
 
     if(editingId){
