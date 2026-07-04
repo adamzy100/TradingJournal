@@ -9,6 +9,9 @@
 <meta name="apple-mobile-web-app-title" content="XAU Journal">
 <title>XAUUSD Trading Journal</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   :root{
     --bg:#121218;
@@ -55,11 +58,10 @@
   }
   .brand{display:flex;align-items:center;gap:10px;}
   .brand-mark{
-    width:30px;height:30px;border-radius:8px;
-    background:linear-gradient(135deg, var(--gold) 0%, #8a6d1a 100%);
-    display:flex;align-items:center;justify-content:center;
-    font-family:var(--mono);font-weight:700;color:#1a1608;font-size:13px;
+    width:34px;height:34px;border-radius:9px;
     flex-shrink:0;
+    object-fit:cover;
+    display:block;
   }
   .brand h1{font-size:16px;margin:0;font-weight:600;letter-spacing:0.2px;}
   .brand span{font-size:11px;color:var(--text-faint);font-family:var(--mono);}
@@ -209,9 +211,10 @@
     margin:0 0 4px;font-weight:600;
   }
   .detail-block p{margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--text);white-space:pre-wrap;}
-  .detail-meta{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--text-dim);}
-  .detail-meta b{color:var(--text);}
-  .stars{color:var(--gold-bright);letter-spacing:1px;font-size:13px;}
+  .detail-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--text-dim);}
+  .detail-meta b:not(.stars){color:var(--text);}
+  .detail-meta span{display:inline-flex;align-items:center;gap:4px;}
+  .stars{color:var(--gold-bright);letter-spacing:1px;font-size:14px;line-height:1;vertical-align:middle;}
   .shots{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
   .shot-thumb{
     width:120px;height:80px;border-radius:8px;object-fit:cover;
@@ -338,7 +341,7 @@
 
   <div class="topbar">
     <div class="brand">
-      <div class="brand-mark">XAU</div>
+      <img class="brand-mark" src="icon-192.png" alt="Trading Journal logo">
       <div>
         <h1>Trading Journal</h1>
         <span>XAUUSD &middot; personal log</span>
@@ -805,6 +808,7 @@ function renderTradeList(){
           <span>Session: <b>${esc(t.session)||'—'}</b></span>
           <span>Confidence: <b>${esc(t.confidence)||'—'}/5</b></span>
           <span>Quality: <b class="stars">${starsStr(t.quality)}</b></span>
+          <span>RR Exited: <b>${t.rrExited!==undefined&&t.rrExited!==''? Number(t.rrExited).toFixed(2):'—'}</b></span>
           <span>RR Reached: <b>${t.rrReached!==undefined&&t.rrReached!==''? Number(t.rrReached).toFixed(2):'—'}</b></span>
           <span>Rule Followed: <b>${esc(t.ruleFollowed)||'—'}</b></span>
           <span>Good Trade: <b>${esc(t.goodTrade)||'—'}</b></span>
