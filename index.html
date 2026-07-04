@@ -111,6 +111,23 @@
     .container{padding:0 10px;}
   }
 
+  /* ---------- Filter bar ---------- */
+  .filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:18px 0 4px;}
+  .filter-btn{
+    padding:8px 14px;border-radius:8px;border:1px solid var(--border);
+    background:var(--card);color:var(--text-dim);font-size:12.5px;font-weight:600;
+    cursor:pointer;font-family:var(--sans);transition:all .12s ease;
+  }
+  .filter-btn:hover{color:var(--text);}
+  .filter-btn.active{background:rgba(212,175,55,0.16);border-color:var(--gold);color:var(--gold-bright);}
+  .custom-range{display:none;gap:8px;align-items:center;flex-wrap:wrap;}
+  .custom-range.show{display:flex;}
+  .custom-range span{color:var(--text-faint);font-size:12px;}
+  .custom-range input[type=date]{
+    background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:7px 10px;font-size:12.5px;font-family:var(--mono);
+  }
+
   /* ---------- Section header ---------- */
   .section-head{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px;}
   .section-head h2{font-size:14px;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-dim);margin:0;font-weight:600;}
@@ -318,6 +335,19 @@
   </div>
 
   <div class="container">
+
+    <div class="filter-bar" id="filterBar">
+      <button type="button" class="filter-btn active" data-mode="all">All Time</button>
+      <button type="button" class="filter-btn" data-mode="thisMonth">This Month</button>
+      <button type="button" class="filter-btn" data-mode="lastMonth">Last Month</button>
+      <button type="button" class="filter-btn" data-mode="custom">Custom Range</button>
+      <div class="custom-range" id="customRange">
+        <span>From</span>
+        <input type="date" id="filterFrom">
+        <span>To</span>
+        <input type="date" id="filterTo">
+      </div>
+    </div>
 
     <div class="stats-grid" id="statsGrid"><!-- stat cards injected by JS --></div>
 
@@ -640,7 +670,9 @@ async function uploadScreenshot(blob){
 /* =========================================================
    STATE
    ========================================================= */
-let currentTrades = [];
+let currentTrades = []; // full unfiltered set fetched from Supabase
+let displayedTrades = []; // currentTrades after the active date filter is applied
+let filterState = { mode: 'all', from: '', to: '' };
 let editingId = null;
 let pendingBeforeBlob = null; // new compressed image blob, set on file input change
 let pendingAfterBlob = null;
@@ -653,13 +685,13 @@ let openRowId = null;
    ========================================================= */
 function renderStats(){
   const grid = document.getElementById('statsGrid');
-  const total = currentTrades.length;
-  const wins = currentTrades.filter(t=>t.result==='Win');
-  const losses = currentTrades.filter(t=>t.result==='Loss');
+  const total = displayedTrades.length;
+  const wins = displayedTrades.filter(t=>t.result==='Win');
+  const losses = displayedTrades.filter(t=>t.result==='Loss');
   const winRate = total ? (wins.length/total*100) : 0;
 
   const overallAvgRR = total
-    ? currentTrades.reduce((s,t)=> s + (Number(t.rrExited)||0), 0) / total
+    ? displayedTrades.reduce((s,t)=> s + (Number(t.rrExited)||0), 0) / total
     : 0;
 
   const avgRRExitedWins = wins.length
@@ -711,11 +743,13 @@ function esc(s){
 
 function renderTradeList(){
   const list = document.getElementById('tradeList');
-  if(!currentTrades.length){
-    list.innerHTML = `<div class="empty-state">No trades logged yet. Tap <b>+ Add Trade</b> to start your journal.</div>`;
+  if(!displayedTrades.length){
+    list.innerHTML = currentTrades.length
+      ? `<div class="empty-state">No trades in this date range.</div>`
+      : `<div class="empty-state">No trades logged yet. Tap <b>+ Add Trade</b> to start your journal.</div>`;
     return;
   }
-  list.innerHTML = currentTrades.map(t=>{
+  list.innerHTML = displayedTrades.map(t=>{
     const isOpen = t.id === openRowId;
     return `
     <div class="trade-row ${isOpen?'open':''}" data-id="${t.id}">
@@ -779,10 +813,60 @@ function renderTradeList(){
   });
 }
 
-async function refresh(){
-  currentTrades = await getTrades();
+/* =========================================================
+   DATE RANGE FILTER
+   ========================================================= */
+function pad2(n){ return String(n).padStart(2,'0'); }
+function ymd(y,m,d){ return `${y}-${pad2(m)}-${pad2(d)}`; }
+// monthsAgo=0 -> current calendar month, 1 -> previous month, etc.
+function monthBounds(monthsAgo){
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+  return {
+    start: ymd(first.getFullYear(), first.getMonth()+1, 1),
+    end: ymd(lastDay.getFullYear(), lastDay.getMonth()+1, lastDay.getDate()),
+  };
+}
+function getFilteredTrades(){
+  if(filterState.mode === 'all') return currentTrades;
+  let start = '', end = '';
+  if(filterState.mode === 'thisMonth'){ ({start, end} = monthBounds(0)); }
+  else if(filterState.mode === 'lastMonth'){ ({start, end} = monthBounds(1)); }
+  else if(filterState.mode === 'custom'){ start = filterState.from || ''; end = filterState.to || ''; }
+  return currentTrades.filter(t=>{
+    if(!t.date) return false;
+    if(start && t.date < start) return false;
+    if(end && t.date > end) return false;
+    return true;
+  });
+}
+function applyFilter(){
+  displayedTrades = getFilteredTrades();
   renderStats();
   renderTradeList();
+}
+
+document.querySelectorAll('#filterBar .filter-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    filterState.mode = btn.dataset.mode;
+    document.querySelectorAll('#filterBar .filter-btn').forEach(b=> b.classList.toggle('active', b===btn));
+    document.getElementById('customRange').classList.toggle('show', filterState.mode === 'custom');
+    applyFilter();
+  });
+});
+document.getElementById('filterFrom').addEventListener('change', (e)=>{
+  filterState.from = e.target.value;
+  applyFilter();
+});
+document.getElementById('filterTo').addEventListener('change', (e)=>{
+  filterState.to = e.target.value;
+  applyFilter();
+});
+
+async function refresh(){
+  currentTrades = await getTrades();
+  applyFilter();
 }
 
 /* =========================================================
