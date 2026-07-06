@@ -523,7 +523,7 @@
             <div class="field">
               <label>Screenshots Before</label>
               <div class="upload-box" id="beforeBox">
-                <span id="beforeLabel">Tap to browse, drop a file, or hover + Ctrl+V to paste</span>
+                <span id="beforeLabel">Tap to add image(s)</span>
                 <input type="file" accept="image/*" id="f_before" multiple>
               </div>
               <div class="thumb-grid" id="beforeThumbs"></div>
@@ -531,7 +531,7 @@
             <div class="field">
               <label>Screenshots After</label>
               <div class="upload-box" id="afterBox">
-                <span id="afterLabel">Tap to browse, drop a file, or hover + Ctrl+V to paste</span>
+                <span id="afterLabel">Tap to add image(s)</span>
                 <input type="file" accept="image/*" id="f_after" multiple>
               </div>
               <div class="thumb-grid" id="afterThumbs"></div>
@@ -1022,8 +1022,8 @@ function renderThumbsInto(containerId, existingUrls, pendingBlobs, removeExistin
 function updateUploadLabel(labelId, existingUrls, pendingBlobs){
   const total = existingUrls.length + pendingBlobs.length;
   document.getElementById(labelId).textContent = total
-    ? `${total} image${total>1?'s':''} — tap, drop, or paste to add more`
-    : 'Tap to browse, drop a file, or hover + Ctrl+V to paste';
+    ? `${total} image${total>1?'s':''} — tap to add more`
+    : 'Tap to add image(s)';
 }
 function renderBeforeThumbs(){
   renderThumbsInto('beforeThumbs', existingBeforeUrls, pendingBeforeBlobs, 'removeExistingBefore', 'removePendingBefore');
