@@ -308,6 +308,8 @@
     background:var(--bg-alt);
   }
   .upload-box:hover{border-color:var(--gold);color:var(--text-dim);}
+  .upload-box:focus{outline:none;border-color:var(--gold);}
+  .upload-box.drag-over{border-color:var(--gold-bright);background:rgba(212,175,55,0.1);color:var(--text);}
   .upload-box input{position:absolute;inset:0;opacity:0;cursor:pointer;}
   .thumb-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
   .thumb-item{position:relative;width:66px;height:66px;}
@@ -521,7 +523,7 @@
             <div class="field">
               <label>Screenshots Before</label>
               <div class="upload-box" id="beforeBox">
-                <span id="beforeLabel">Tap to add image(s)</span>
+                <span id="beforeLabel">Tap, drop, or paste (Ctrl+V) an image</span>
                 <input type="file" accept="image/*" id="f_before" multiple>
               </div>
               <div class="thumb-grid" id="beforeThumbs"></div>
@@ -529,7 +531,7 @@
             <div class="field">
               <label>Screenshots After</label>
               <div class="upload-box" id="afterBox">
-                <span id="afterLabel">Tap to add image(s)</span>
+                <span id="afterLabel">Tap, drop, or paste (Ctrl+V) an image</span>
                 <input type="file" accept="image/*" id="f_after" multiple>
               </div>
               <div class="thumb-grid" id="afterThumbs"></div>
@@ -1020,8 +1022,8 @@ function renderThumbsInto(containerId, existingUrls, pendingBlobs, removeExistin
 function updateUploadLabel(labelId, existingUrls, pendingBlobs){
   const total = existingUrls.length + pendingBlobs.length;
   document.getElementById(labelId).textContent = total
-    ? `${total} image${total>1?'s':''} — tap to add more`
-    : 'Tap to add image(s)';
+    ? `${total} image${total>1?'s':''} — tap, drop, or paste to add more`
+    : 'Tap, drop, or paste (Ctrl+V) an image';
 }
 function renderBeforeThumbs(){
   renderThumbsInto('beforeThumbs', existingBeforeUrls, pendingBeforeBlobs, 'removeExistingBefore', 'removePendingBefore');
@@ -1036,24 +1038,57 @@ function removePendingBefore(i){ pendingBeforeBlobs.splice(i,1); renderBeforeThu
 function removeExistingAfter(i){ removedExistingUrls.push(existingAfterUrls[i]); existingAfterUrls.splice(i,1); renderAfterThumbs(); }
 function removePendingAfter(i){ pendingAfterBlobs.splice(i,1); renderAfterThumbs(); }
 
-document.getElementById('f_before').addEventListener('change', async (e)=>{
-  const files = Array.from(e.target.files || []);
-  for(const file of files){
+async function addFilesToBefore(files){
+  for(const file of Array.from(files || [])){
+    if(!file || !file.type || !file.type.startsWith('image/')) continue;
     const blob = await compressImageToBlob(file);
     if(blob) pendingBeforeBlobs.push(blob);
   }
-  e.target.value = '';
   renderBeforeThumbs();
-});
-document.getElementById('f_after').addEventListener('change', async (e)=>{
-  const files = Array.from(e.target.files || []);
-  for(const file of files){
+}
+async function addFilesToAfter(files){
+  for(const file of Array.from(files || [])){
+    if(!file || !file.type || !file.type.startsWith('image/')) continue;
     const blob = await compressImageToBlob(file);
     if(blob) pendingAfterBlobs.push(blob);
   }
-  e.target.value = '';
   renderAfterThumbs();
+}
+
+document.getElementById('f_before').addEventListener('change', async (e)=>{
+  await addFilesToBefore(e.target.files);
+  e.target.value = '';
 });
+document.getElementById('f_after').addEventListener('change', async (e)=>{
+  await addFilesToAfter(e.target.files);
+  e.target.value = '';
+});
+
+// Drag-and-drop + clipboard paste support for both upload boxes.
+function wireDropZone(boxId, addFilesFn){
+  const box = document.getElementById(boxId);
+  box.setAttribute('tabindex', '0');
+  box.addEventListener('dragover', (e)=>{ e.preventDefault(); box.classList.add('drag-over'); });
+  box.addEventListener('dragleave', ()=>{ box.classList.remove('drag-over'); });
+  box.addEventListener('drop', async (e)=>{
+    e.preventDefault();
+    box.classList.remove('drag-over');
+    await addFilesFn(e.dataTransfer && e.dataTransfer.files);
+  });
+  box.addEventListener('paste', async (e)=>{
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    const files = [];
+    for(const item of items){
+      if(item.kind === 'file'){
+        const f = item.getAsFile();
+        if(f) files.push(f);
+      }
+    }
+    if(files.length){ e.preventDefault(); await addFilesFn(files); }
+  });
+}
+wireDropZone('beforeBox', addFilesToBefore);
+wireDropZone('afterBox', addFilesToAfter);
 
 function resetForm(){
   form.reset();
