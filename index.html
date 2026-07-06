@@ -523,7 +523,7 @@
             <div class="field">
               <label>Screenshots Before</label>
               <div class="upload-box" id="beforeBox">
-                <span id="beforeLabel">Tap, drop, or paste (Ctrl+V) an image</span>
+                <span id="beforeLabel">Tap to browse, drop a file, or hover + Ctrl+V to paste</span>
                 <input type="file" accept="image/*" id="f_before" multiple>
               </div>
               <div class="thumb-grid" id="beforeThumbs"></div>
@@ -531,7 +531,7 @@
             <div class="field">
               <label>Screenshots After</label>
               <div class="upload-box" id="afterBox">
-                <span id="afterLabel">Tap, drop, or paste (Ctrl+V) an image</span>
+                <span id="afterLabel">Tap to browse, drop a file, or hover + Ctrl+V to paste</span>
                 <input type="file" accept="image/*" id="f_after" multiple>
               </div>
               <div class="thumb-grid" id="afterThumbs"></div>
@@ -1023,7 +1023,7 @@ function updateUploadLabel(labelId, existingUrls, pendingBlobs){
   const total = existingUrls.length + pendingBlobs.length;
   document.getElementById(labelId).textContent = total
     ? `${total} image${total>1?'s':''} — tap, drop, or paste to add more`
-    : 'Tap, drop, or paste (Ctrl+V) an image';
+    : 'Tap to browse, drop a file, or hover + Ctrl+V to paste';
 }
 function renderBeforeThumbs(){
   renderThumbsInto('beforeThumbs', existingBeforeUrls, pendingBeforeBlobs, 'removeExistingBefore', 'removePendingBefore');
@@ -1064,10 +1064,15 @@ document.getElementById('f_after').addEventListener('change', async (e)=>{
   e.target.value = '';
 });
 
-// Drag-and-drop + clipboard paste support for both upload boxes.
-function wireDropZone(boxId, addFilesFn){
+// Drag-and-drop support, plus hover-to-paste: no click needed, just hover
+// the mouse over a box and press Ctrl+V. Tapping/clicking still opens the
+// file browser exactly as before.
+let hoveredUploadBox = null; // 'before' | 'after' | null
+
+function wireDropZone(boxId, addFilesFn, hoverKey){
   const box = document.getElementById(boxId);
-  box.setAttribute('tabindex', '0');
+  box.addEventListener('mouseenter', ()=>{ hoveredUploadBox = hoverKey; });
+  box.addEventListener('mouseleave', ()=>{ if(hoveredUploadBox === hoverKey) hoveredUploadBox = null; });
   box.addEventListener('dragover', (e)=>{ e.preventDefault(); box.classList.add('drag-over'); });
   box.addEventListener('dragleave', ()=>{ box.classList.remove('drag-over'); });
   box.addEventListener('drop', async (e)=>{
@@ -1075,20 +1080,26 @@ function wireDropZone(boxId, addFilesFn){
     box.classList.remove('drag-over');
     await addFilesFn(e.dataTransfer && e.dataTransfer.files);
   });
-  box.addEventListener('paste', async (e)=>{
-    const items = (e.clipboardData && e.clipboardData.items) || [];
-    const files = [];
-    for(const item of items){
-      if(item.kind === 'file'){
-        const f = item.getAsFile();
-        if(f) files.push(f);
-      }
-    }
-    if(files.length){ e.preventDefault(); await addFilesFn(files); }
-  });
 }
-wireDropZone('beforeBox', addFilesToBefore);
-wireDropZone('afterBox', addFilesToAfter);
+wireDropZone('beforeBox', addFilesToBefore, 'before');
+wireDropZone('afterBox', addFilesToAfter, 'after');
+
+document.addEventListener('paste', async (e)=>{
+  if(!hoveredUploadBox) return;
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  const files = [];
+  for(const item of items){
+    if(item.kind === 'file'){
+      const f = item.getAsFile();
+      if(f) files.push(f);
+    }
+  }
+  if(files.length){
+    e.preventDefault();
+    if(hoveredUploadBox === 'before') await addFilesToBefore(files);
+    else await addFilesToAfter(files);
+  }
+});
 
 function resetForm(){
   form.reset();
