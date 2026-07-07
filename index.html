@@ -749,9 +749,7 @@ function renderStats(){
   const losses = displayedTrades.filter(t=>t.result==='Loss');
   const winRate = total ? (wins.length/total*100) : 0;
 
-  const overallAvgRR = total
-    ? displayedTrades.reduce((s,t)=> s + (Number(t.rrExited)||0), 0) / total
-    : 0;
+  const totalRR = displayedTrades.reduce((s,t)=> s + (Number(t.rrExited)||0), 0);
 
   const avgRRExitedWins = wins.length
     ? wins.reduce((s,t)=> s + (Number(t.rrExited)||0), 0) / wins.length
@@ -767,9 +765,9 @@ function renderStats(){
     {label:'Total Trades', value: total},
     {label:'Wins', value: wins.length, cls:'green'},
     {label:'Losses', value: losses.length, cls:'red'},
-    {label:'Overall Avg RR', value: total ? overallAvgRR.toFixed(2) : '—', cls:'gold'},
-    {label:'Avg RR Exited (Wins)', value: wins.length ? avgRRExitedWins.toFixed(2) : '—'},
-    {label:'Avg RR Reached (Wins)', value: avgRRReachedWins!==null ? avgRRReachedWins.toFixed(2) : '—'},
+    {label:'Total RR', value: total ? totalRR.toFixed(2) : '—', cls: total ? (totalRR>=0?'green':'red') : ''},
+    {label:'Avg RR Exited (Wins)', value: wins.length ? avgRRExitedWins.toFixed(2) : '—', cls:'green'},
+    {label:'Avg RR Reached (Wins)', value: avgRRReachedWins!==null ? avgRRReachedWins.toFixed(2) : '—', cls:'green'},
   ];
 
   grid.innerHTML = stats.map(s=>`
