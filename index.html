@@ -46,6 +46,31 @@
   ::selection{background:var(--gold);color:#111;}
   a{color:var(--gold-bright);}
 
+  /* ---------- Lock screen ---------- */
+  .lock-overlay{
+    position:fixed;inset:0;z-index:200;
+    background:var(--bg);
+    display:flex;align-items:center;justify-content:center;
+    padding:20px;
+  }
+  .lock-overlay.hide{display:none;}
+  .lock-card{
+    width:100%;max-width:340px;
+    background:var(--card);border:1px solid var(--border);border-radius:14px;
+    padding:32px 28px;text-align:center;
+  }
+  .lock-icon{font-size:32px;margin-bottom:12px;}
+  .lock-card h2{margin:0 0 6px;font-size:18px;font-weight:600;}
+  .lock-card p{margin:0 0 20px;color:var(--text-faint);font-size:13px;}
+  #lockForm input{
+    width:100%;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:12px 14px;font-size:15px;text-align:center;
+    letter-spacing:2px;margin-bottom:14px;outline:none;font-family:var(--sans);
+  }
+  #lockForm input:focus{border-color:var(--gold);}
+  #lockForm .btn{width:100%;padding:12px;font-size:14px;}
+  .lock-error{color:var(--red);font-size:12.5px;margin-top:12px;min-height:16px;}
+
   /* ---------- Topbar ---------- */
   .topbar{
     position:sticky;top:0;z-index:20;
@@ -112,6 +137,8 @@
   @media (max-width:480px){
     .stats-grid{grid-template-columns:repeat(2, 1fr);}
     .container{padding:0 10px;}
+    .topbar .btn{padding:9px 10px;font-size:11.5px;}
+    .topbar .brand span{display:none;}
   }
 
   /* ---------- Filter bar ---------- */
@@ -215,6 +242,8 @@
   .detail-block p{margin:0 0 12px;font-size:13px;line-height:1.5;color:var(--text);white-space:pre-wrap;}
   .detail-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--text-dim);}
   .detail-meta b:not(.stars){color:var(--text);}
+  .detail-meta b.pnl-pos{color:var(--green);}
+  .detail-meta b.pnl-neg{color:var(--red);}
   .detail-meta span{display:inline-flex;align-items:center;gap:4px;}
   .stars{color:var(--gold-bright);letter-spacing:1px;font-size:14px;line-height:1;vertical-align:middle;}
   .shots{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
@@ -322,6 +351,30 @@
 
   .modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:6px;}
 
+  /* ---------- PnL Calendar ---------- */
+  .cal-view-toggle{display:flex;gap:8px;width:180px;margin-bottom:16px;}
+  .cal-nav{display:flex;align-items:center;justify-content:center;gap:18px;margin:22px 0 14px;}
+  .cal-nav span{font-family:var(--mono);font-size:14px;font-weight:700;min-width:140px;text-align:center;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7, 1fr);gap:6px;}
+  .cal-dow{text-align:center;font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;padding-bottom:6px;}
+  .cal-day{
+    aspect-ratio:1/1;border-radius:8px;border:1px solid var(--border);background:var(--bg-alt);
+    padding:6px;display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);
+  }
+  .cal-day.empty{border:none;background:transparent;}
+  .cal-day .cal-date{font-size:10.5px;color:var(--text-faint);}
+  .cal-day .cal-value{font-size:12px;font-weight:700;line-height:1.2;}
+  .cal-day .cal-count{font-size:9px;color:var(--text-faint);}
+  .cal-day.pos{background:rgba(62,207,114,0.14);border-color:rgba(62,207,114,0.4);}
+  .cal-day.pos .cal-value{color:var(--green);}
+  .cal-day.neg{background:rgba(255,92,92,0.14);border-color:rgba(255,92,92,0.4);}
+  .cal-day.neg .cal-value{color:var(--red);}
+  .cal-day.flat{background:rgba(138,136,148,0.12);}
+  @media (max-width:640px){
+    .cal-day .cal-value{font-size:10px;}
+    .cal-day .cal-count{display:none;}
+  }
+
   /* ---------- Lightbox ---------- */
   .lightbox{
     display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);
@@ -343,6 +396,19 @@
 </head>
 <body>
 
+  <div class="lock-overlay" id="lockOverlay">
+    <div class="lock-card">
+      <div class="lock-icon">🔒</div>
+      <h2>Trading Journal</h2>
+      <p>Enter your password to continue</p>
+      <form id="lockForm">
+        <input type="password" id="lockPassword" placeholder="Password" autocomplete="current-password" required>
+        <button type="submit" class="btn btn-primary" id="lockSubmitBtn">Unlock</button>
+        <div class="lock-error" id="lockError"></div>
+      </form>
+    </div>
+  </div>
+
   <div class="topbar">
     <div class="brand">
       <img class="brand-mark" src="icon-192.png" alt="Trading Journal logo">
@@ -351,7 +417,10 @@
         <span>XAUUSD &middot; personal log</span>
       </div>
     </div>
-    <button class="btn btn-primary" id="openAddBtn">+ Add Trade</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" id="openCalendarBtn">PnL Calendar</button>
+      <button class="btn btn-primary" id="openAddBtn">+ Add Trade</button>
+    </div>
   </div>
 
   <div class="container">
@@ -440,6 +509,11 @@
               <label>Actual RR Reached <span style="text-transform:none;color:var(--text-faint);">(optional)</span></label>
               <input type="number" step="0.01" id="f_rrReached" placeholder="e.g. 3.2">
             </div>
+          </div>
+
+          <div class="field">
+            <label>Actual $ P&amp;L <span style="text-transform:none;color:var(--text-faint);">(optional)</span></label>
+            <input type="number" step="0.01" id="f_pnlUsd" placeholder="e.g. 1110 or -540">
           </div>
 
           <div class="row2">
@@ -547,6 +621,45 @@
     </div>
   </div>
 
+  <!-- PnL Calendar -->
+  <div class="overlay" id="calendarOverlay">
+    <div class="modal" style="max-width:820px;">
+      <div class="modal-head">
+        <h3>PnL Calendar</h3>
+        <button class="close-x" id="closeCalendarBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="filter-bar" id="calFilterBar" style="margin:0 0 16px;">
+          <button type="button" class="filter-btn active" data-mode="all">All Time</button>
+          <button type="button" class="filter-btn" data-mode="thisMonth">This Month</button>
+          <button type="button" class="filter-btn" data-mode="lastMonth">Last Month</button>
+          <button type="button" class="filter-btn" data-mode="custom">Custom Range</button>
+          <div class="custom-range" id="calCustomRange">
+            <span>From</span>
+            <input type="date" id="calFilterFrom">
+            <span>To</span>
+            <input type="date" id="calFilterTo">
+          </div>
+        </div>
+
+        <div class="cal-view-toggle">
+          <button type="button" class="toggle-btn active" id="calViewR" data-view="r">RR</button>
+          <button type="button" class="toggle-btn" id="calViewUsd" data-view="usd">$</button>
+        </div>
+
+        <div class="stats-grid" id="calStatsGrid" style="grid-template-columns:repeat(5, 1fr);"></div>
+
+        <div class="cal-nav">
+          <button type="button" class="icon-btn" id="calPrevBtn">&#8249;</button>
+          <span id="calMonthLabel">—</span>
+          <button type="button" class="icon-btn" id="calNextBtn">&#8250;</button>
+        </div>
+
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Lightbox -->
   <div class="lightbox" id="lightbox">
     <button class="lightbox-close" id="lightboxClose">&times;</button>
@@ -585,6 +698,7 @@ function dbRowToTrade(r){
     result: r.result,
     rrExited: r.rr_exited,
     rrReached: r.rr_reached,
+    pnlUsd: r.pnl_usd,
     confidence: r.confidence,
     quality: r.quality,
     grade: r.grade,
@@ -614,6 +728,7 @@ function tradeToDbRow(t){
     result: t.result,
     rr_exited: (t.rrExited === '' || t.rrExited === undefined || t.rrExited === null) ? null : Number(t.rrExited),
     rr_reached: (t.rrReached === '' || t.rrReached === undefined || t.rrReached === null) ? null : Number(t.rrReached),
+    pnl_usd: (t.pnlUsd === '' || t.pnlUsd === undefined || t.pnlUsd === null) ? null : Number(t.pnlUsd),
     confidence: t.confidence ? Number(t.confidence) : null,
     quality: t.quality ? Number(t.quality) : null,
     grade: t.grade || null,
@@ -841,6 +956,7 @@ function renderTradeList(){
           <span>Quality: <b class="stars">${starsStr(t.quality)}</b></span>
           <span>RR Exited: <b>${t.rrExited!==undefined&&t.rrExited!==''? Number(t.rrExited).toFixed(2):'—'}</b></span>
           <span>RR Reached: <b>${t.rrReached!==undefined&&t.rrReached!==''? Number(t.rrReached).toFixed(2):'—'}</b></span>
+          <span>$ P&L: <b class="${t.pnlUsd>0?'pnl-pos':(t.pnlUsd<0?'pnl-neg':'')}">${t.pnlUsd!==undefined&&t.pnlUsd!==null&&t.pnlUsd!==''? (Number(t.pnlUsd)>=0?'+$':'-$')+Math.abs(Number(t.pnlUsd)).toFixed(2):'—'}</b></span>
           <span>Rule Followed: <b>${esc(t.ruleFollowed)||'—'}</b></span>
           <span>Good Trade: <b>${esc(t.goodTrade)||'—'}</b></span>
           <span>Duration: <b>${formatDuration(t.durationMinutes)}</b></span>
@@ -1162,6 +1278,7 @@ async function startEdit(id){
   document.getElementById('f_pair').value = t.pair || 'XAUUSD';
   document.getElementById('f_rrExited').value = t.rrExited ?? '';
   document.getElementById('f_rrReached').value = t.rrReached ?? '';
+  document.getElementById('f_pnlUsd').value = t.pnlUsd ?? '';
   document.getElementById('f_h4').value = t.h4 || '';
   document.getElementById('f_h1').value = t.h1 || '';
   document.getElementById('f_m30').value = t.m30 || '';
@@ -1242,6 +1359,7 @@ form.addEventListener('submit', async (e)=>{
       result: state.result.value,
       rrExited: document.getElementById('f_rrExited').value,
       rrReached: document.getElementById('f_rrReached').value,
+      pnlUsd: document.getElementById('f_pnlUsd').value,
       confidence: state.confidence.value,
       quality: state.quality.value,
       grade: state.grade.value,
@@ -1281,11 +1399,197 @@ form.addEventListener('submit', async (e)=>{
 });
 
 /* =========================================================
+   PNL CALENDAR
+   ========================================================= */
+let calYear, calMonth;
+let calFilterState = { mode: 'all', from: '', to: '' };
+let calView = 'r'; // 'r' or 'usd'
+
+function openCalendar(){
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth();
+  document.getElementById('calendarOverlay').classList.add('show');
+  renderCalendar();
+}
+function closeCalendar(){
+  document.getElementById('calendarOverlay').classList.remove('show');
+}
+document.getElementById('openCalendarBtn').addEventListener('click', openCalendar);
+document.getElementById('closeCalendarBtn').addEventListener('click', closeCalendar);
+document.getElementById('calendarOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'calendarOverlay') closeCalendar();
+});
+
+document.getElementById('calPrevBtn').addEventListener('click', ()=>{
+  calMonth--;
+  if(calMonth < 0){ calMonth = 11; calYear--; }
+  renderCalendar();
+});
+document.getElementById('calNextBtn').addEventListener('click', ()=>{
+  calMonth++;
+  if(calMonth > 11){ calMonth = 0; calYear++; }
+  renderCalendar();
+});
+
+document.querySelectorAll('#calFilterBar .filter-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    calFilterState.mode = btn.dataset.mode;
+    document.querySelectorAll('#calFilterBar .filter-btn').forEach(b=> b.classList.toggle('active', b===btn));
+    document.getElementById('calCustomRange').classList.toggle('show', calFilterState.mode === 'custom');
+    if(calFilterState.mode === 'thisMonth'){
+      const n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth();
+    }else if(calFilterState.mode === 'lastMonth'){
+      const n = new Date(); calMonth = n.getMonth()-1; calYear = n.getFullYear();
+      if(calMonth < 0){ calMonth = 11; calYear--; }
+    }
+    renderCalendar();
+  });
+});
+document.getElementById('calFilterFrom').addEventListener('change', (e)=>{
+  calFilterState.from = e.target.value;
+  renderCalendar();
+});
+document.getElementById('calFilterTo').addEventListener('change', (e)=>{
+  calFilterState.to = e.target.value;
+  renderCalendar();
+});
+document.getElementById('calViewR').addEventListener('click', ()=>{
+  calView = 'r';
+  document.getElementById('calViewR').classList.add('active');
+  document.getElementById('calViewUsd').classList.remove('active');
+  renderCalendar();
+});
+document.getElementById('calViewUsd').addEventListener('click', ()=>{
+  calView = 'usd';
+  document.getElementById('calViewUsd').classList.add('active');
+  document.getElementById('calViewR').classList.remove('active');
+  renderCalendar();
+});
+
+function getCalFilteredTrades(){
+  if(calFilterState.mode === 'all') return currentTrades;
+  let start = '', end = '';
+  if(calFilterState.mode === 'thisMonth'){ ({start, end} = monthBounds(0)); }
+  else if(calFilterState.mode === 'lastMonth'){ ({start, end} = monthBounds(1)); }
+  else if(calFilterState.mode === 'custom'){ start = calFilterState.from || ''; end = calFilterState.to || ''; }
+  return currentTrades.filter(t=>{
+    if(!t.date) return false;
+    if(start && t.date < start) return false;
+    if(end && t.date > end) return false;
+    return true;
+  });
+}
+
+function fmtUsd(v){
+  return (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(2);
+}
+function fmtR(v){
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + 'R';
+}
+
+function renderCalendar(){
+  const filtered = getCalFilteredTrades();
+  const byDate = {};
+  filtered.forEach(t=>{
+    if(!t.date) return;
+    if(!byDate[t.date]) byDate[t.date] = { count:0, r:0, usd:0, hasUsd:false };
+    byDate[t.date].count++;
+    byDate[t.date].r += Number(t.rrExited)||0;
+    if(t.pnlUsd !== null && t.pnlUsd !== undefined && t.pnlUsd !== ''){
+      byDate[t.date].usd += Number(t.pnlUsd);
+      byDate[t.date].hasUsd = true;
+    }
+  });
+  const days = Object.keys(byDate);
+  const totalTrades = filtered.length;
+  const totalDays = days.length;
+  const totalR = days.reduce((s,d)=> s + byDate[d].r, 0);
+  const usdDays = days.filter(d=> byDate[d].hasUsd);
+  const totalUsd = usdDays.reduce((s,d)=> s + byDate[d].usd, 0);
+  const metricFor = d => calView === 'usd' ? byDate[d].usd : byDate[d].r;
+  const relevantDays = calView === 'usd' ? usdDays : days;
+  const greenDays = relevantDays.filter(d=> metricFor(d) > 0).length;
+  const redDays = relevantDays.filter(d=> metricFor(d) < 0).length;
+
+  document.getElementById('calStatsGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Trading Days</div><div class="stat-value">${totalDays}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Trades</div><div class="stat-value">${totalTrades}</div></div>
+    <div class="stat-card"><div class="stat-label">Green Days</div><div class="stat-value green">${greenDays}</div></div>
+    <div class="stat-card"><div class="stat-label">Red Days</div><div class="stat-value red">${redDays}</div></div>
+    <div class="stat-card"><div class="stat-label">Total ${calView==='usd'?'$':'RR'}</div><div class="stat-value ${(calView==='usd'?totalUsd:totalR)>=0?'green':'red'}">${calView==='usd'?fmtUsd(totalUsd):totalR.toFixed(2)}</div></div>
+  `;
+
+  document.getElementById('calMonthLabel').textContent = new Date(calYear, calMonth, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+
+  const firstDow = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+
+  let html = ['Su','Mo','Tu','We','Th','Fr','Sa'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  for(let i=0;i<firstDow;i++) html += `<div class="cal-day empty"></div>`;
+  for(let d=1; d<=daysInMonth; d++){
+    const iso = `${calYear}-${pad2(calMonth+1)}-${pad2(d)}`;
+    const info = byDate[iso];
+    let cls = 'cal-day';
+    let valueHtml = '';
+    let countHtml = '';
+    if(info){
+      const hasVal = calView === 'usd' ? info.hasUsd : true;
+      const val = calView === 'usd' ? info.usd : info.r;
+      if(hasVal) cls += val > 0 ? ' pos' : (val < 0 ? ' neg' : ' flat');
+      valueHtml = hasVal
+        ? `<div class="cal-value">${calView==='usd' ? fmtUsd(val) : fmtR(val)}</div>`
+        : `<div class="cal-value" style="color:var(--text-faint)">—</div>`;
+      countHtml = `<div class="cal-count">${info.count} trade${info.count>1?'s':''}</div>`;
+    }
+    html += `<div class="${cls}"><div class="cal-date">${d}</div>${valueHtml}${countHtml}</div>`;
+  }
+  document.getElementById('calGrid').innerHTML = html;
+}
+
+/* =========================================================
+   AUTH / LOCK SCREEN
+   The app itself is behind a login screen, and Supabase's own
+   access rules also require a valid session (not just this UI
+   check), so the data is protected even if someone bypasses
+   the page.
+   ========================================================= */
+const AUTH_EMAIL = 'adamzy100@gmail.com';
+
+function showApp(){
+  document.getElementById('lockOverlay').classList.add('hide');
+  document.getElementById('f_date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('tradeList').innerHTML = '<div class="empty-state">Loading trades…</div>';
+  refresh();
+}
+
+document.getElementById('lockForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const pw = document.getElementById('lockPassword').value;
+  const btn = document.getElementById('lockSubmitBtn');
+  const errEl = document.getElementById('lockError');
+  errEl.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Checking...';
+  const { error } = await sb.auth.signInWithPassword({ email: AUTH_EMAIL, password: pw });
+  btn.disabled = false;
+  btn.textContent = 'Unlock';
+  if(error){
+    errEl.textContent = 'Incorrect password';
+  }else{
+    showApp();
+  }
+});
+
+/* =========================================================
    INIT
    ========================================================= */
-document.getElementById('f_date').value = new Date().toISOString().slice(0,10);
-document.getElementById('tradeList').innerHTML = '<div class="empty-state">Loading trades…</div>';
-refresh();
+(async function initAuth(){
+  const { data: { session } } = await sb.auth.getSession();
+  if(session){
+    showApp();
+  }
+})();
 </script>
 </body>
 </html>
