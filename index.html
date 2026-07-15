@@ -355,25 +355,32 @@
   .cal-view-toggle{display:flex;gap:8px;width:180px;margin-bottom:16px;}
   .cal-nav{display:flex;align-items:center;justify-content:center;gap:18px;margin:22px 0 14px;}
   .cal-nav span{font-family:var(--mono);font-size:14px;font-weight:700;min-width:140px;text-align:center;}
-  .cal-grid{display:grid;grid-template-columns:repeat(7, 1fr);gap:6px;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7, minmax(0,1fr));gap:6px;width:100%;}
   .cal-dow{text-align:center;font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.4px;padding-bottom:6px;}
   .cal-day{
-    aspect-ratio:1/1;border-radius:8px;border:1px solid var(--border);background:var(--bg-alt);
-    padding:6px;display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);
-    cursor:pointer;
+    min-width:0;aspect-ratio:1/1;border-radius:8px;border:1px solid var(--border);background:var(--bg-alt);
+    padding:5px 4px;display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);
+    cursor:pointer;overflow:hidden;
   }
   .cal-day.empty{border:none;background:transparent;}
   .cal-day .cal-date{font-size:10.5px;color:var(--text-faint);}
-  .cal-day .cal-value{font-size:12px;font-weight:700;line-height:1.2;}
-  .cal-day .cal-count{font-size:10px;font-weight:600;color:var(--text-dim);}
+  .cal-day .cal-value{font-size:12px;font-weight:700;line-height:1.15;overflow-wrap:break-word;word-break:break-word;white-space:normal;}
+  .cal-day .cal-count{font-size:10px;font-weight:600;color:var(--text-dim);white-space:nowrap;}
   .cal-day.pos{background:rgba(62,207,114,0.14);border-color:rgba(62,207,114,0.4);}
   .cal-day.pos .cal-value{color:var(--green);}
   .cal-day.neg{background:rgba(255,92,92,0.14);border-color:rgba(255,92,92,0.4);}
   .cal-day.neg .cal-value{color:var(--red);}
   .cal-day.flat{background:rgba(138,136,148,0.12);}
+  .cal-stats-grid{grid-template-columns:repeat(5, 1fr);}
   @media (max-width:640px){
-    .cal-day .cal-value{font-size:10px;}
-    .cal-day .cal-count{display:none;}
+    .cal-day{padding:3px 2px;}
+    .cal-day .cal-date{font-size:9px;}
+    .cal-day .cal-value{font-size:8.5px;}
+    .cal-day .cal-count{font-size:7.5px;}
+    .cal-stats-grid{grid-template-columns:repeat(3, 1fr);}
+  }
+  @media (max-width:420px){
+    .cal-stats-grid{grid-template-columns:repeat(2, 1fr);}
   }
 
   /* ---------- Lightbox ---------- */
@@ -648,7 +655,7 @@
           <button type="button" class="toggle-btn" id="calViewUsd" data-view="usd">$</button>
         </div>
 
-        <div class="stats-grid" id="calStatsGrid" style="grid-template-columns:repeat(5, 1fr);"></div>
+        <div class="stats-grid cal-stats-grid" id="calStatsGrid"></div>
 
         <div class="cal-nav">
           <button type="button" class="icon-btn" id="calPrevBtn">&#8249;</button>
@@ -997,7 +1004,7 @@ function renderTradeList(){
           <span>Quality: <b class="stars">${starsStr(t.quality)}</b></span>
           <span>RR Exited: <b>${t.rrExited!==undefined&&t.rrExited!==''? Number(t.rrExited).toFixed(2):'—'}</b></span>
           <span>RR Reached: <b>${t.rrReached!==undefined&&t.rrReached!==''? Number(t.rrReached).toFixed(2):'—'}</b></span>
-          <span>$ P&L: <b class="${t.pnlUsd>0?'pnl-pos':(t.pnlUsd<0?'pnl-neg':'')}">${t.pnlUsd!==undefined&&t.pnlUsd!==null&&t.pnlUsd!==''? (Number(t.pnlUsd)>=0?'+$':'-$')+Math.abs(Number(t.pnlUsd)).toFixed(2):'—'}</b></span>
+          <span>$ P&L: <b class="${t.pnlUsd>0?'pnl-pos':(t.pnlUsd<0?'pnl-neg':'')}">${t.pnlUsd!==undefined&&t.pnlUsd!==null&&t.pnlUsd!==''? fmtUsd(Number(t.pnlUsd)):'—'}</b></span>
           <span>Rule Followed: <b>${esc(t.ruleFollowed)||'—'}</b></span>
           <span>Good Trade: <b>${esc(t.goodTrade)||'—'}</b></span>
           <span>Duration: <b>${formatDuration(t.durationMinutes)}</b></span>
@@ -1528,10 +1535,22 @@ function getCalFilteredTrades(){
 }
 
 function fmtUsd(v){
-  return (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(2);
+  const formatted = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  return (v >= 0 ? '+$' : '-$') + formatted;
 }
 function fmtR(v){
   return (v >= 0 ? '+' : '') + v.toFixed(2) + 'R';
+}
+// Compact form for the small calendar day cells (e.g. +$100K) so large
+// amounts always fit without truncating. Full precision stays visible in
+// the Total $ card, the day editor, and each trade's detail view.
+function fmtUsdCompact(v){
+  const abs = Math.abs(v);
+  let str;
+  if(abs >= 10000) str = '$' + Math.round(abs/1000) + 'K';
+  else if(abs >= 1000) str = '$' + (abs/1000).toFixed(1) + 'K';
+  else str = '$' + abs.toFixed(0);
+  return (v >= 0 ? '+' : '-') + str;
 }
 
 function renderCalendar(){
