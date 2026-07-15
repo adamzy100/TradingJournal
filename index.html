@@ -481,16 +481,12 @@
             <textarea id="f_h1"></textarea>
           </div>
           <div class="field">
-            <label>M15 Confirmation &amp; AOI</label>
+            <label>M30 Reaction</label>
+            <textarea id="f_m30"></textarea>
+          </div>
+          <div class="field">
+            <label>M15 Execution</label>
             <textarea id="f_m15"></textarea>
-          </div>
-          <div class="field">
-            <label>M5 Execution</label>
-            <textarea id="f_m5"></textarea>
-          </div>
-          <div class="field">
-            <label>M1</label>
-            <textarea id="f_m1"></textarea>
           </div>
 
           <div class="row2">
@@ -594,6 +590,7 @@ function dbRowToTrade(r){
     grade: r.grade,
     h4: r.h4_context,
     h1: r.h1_context,
+    m30: r.m30_reaction,
     m15: r.m15_area,
     m5: r.m5_confirmation,
     m1: r.m1_trigger,
@@ -622,6 +619,7 @@ function tradeToDbRow(t){
     grade: t.grade || null,
     h4_context: t.h4 || null,
     h1_context: t.h1 || null,
+    m30_reaction: t.m30 || null,
     m15_area: t.m15 || null,
     m5_confirmation: t.m5 || null,
     m1_trigger: t.m1 || null,
@@ -743,6 +741,11 @@ let pendingAfterBlobs = [];
 let existingBeforeUrls = []; // already-uploaded URLs when editing, kept unless removed
 let existingAfterUrls = [];
 let removedExistingUrls = []; // images detached during edit, deleted from storage only after a successful save
+// M5/M1 were retired from the Add Trade form but old trades still have this
+// data saved. These carry the original values through an edit-save
+// untouched, so editing an old trade doesn't wipe its legacy notes.
+let editingLegacyM5 = null;
+let editingLegacyM1 = null;
 let openRowId = null;
 
 /* =========================================================
@@ -846,12 +849,16 @@ function renderTradeList(){
           <div class="detail-block">
             <h4>H4 Market Story</h4><p>${esc(t.h4)||'—'}</p>
             <h4>H1 Trading Direction</h4><p>${esc(t.h1)||'—'}</p>
-            <h4>M15 Confirmation & AOI</h4><p>${esc(t.m15)||'—'}</p>
           </div>
           <div class="detail-block">
-            <h4>M5 Execution</h4><p>${esc(t.m5)||'—'}</p>
-            <h4>M1</h4><p>${esc(t.m1)||'—'}</p>
+            <h4>M30 Reaction</h4><p>${esc(t.m30)||'—'}</p>
+            <h4>M15 Execution</h4><p>${esc(t.m15)||'—'}</p>
           </div>
+          ${(t.m5 || t.m1) ? `
+          <div class="detail-block">
+            <h4>M5 Confirmation <span style="text-transform:none;color:var(--text-faint);">(legacy)</span></h4><p>${esc(t.m5)||'—'}</p>
+            <h4>M1 Trigger <span style="text-transform:none;color:var(--text-faint);">(legacy)</span></h4><p>${esc(t.m1)||'—'}</p>
+          </div>` : ''}
           <div class="detail-block">
             <h4>One Lesson</h4><p>${esc(t.lesson)||'—'}</p>
           </div>
@@ -1114,6 +1121,8 @@ function resetForm(){
   pendingBeforeBlobs = []; pendingAfterBlobs = [];
   existingBeforeUrls = []; existingAfterUrls = [];
   removedExistingUrls = [];
+  editingLegacyM5 = null;
+  editingLegacyM1 = null;
   Object.keys(state).forEach(k=> state[k].value='');
   document.querySelectorAll('.toggle-btn').forEach(b=> b.className='toggle-btn');
   document.querySelectorAll('#f_confidence button').forEach(b=> b.classList.remove('on'));
@@ -1155,9 +1164,10 @@ async function startEdit(id){
   document.getElementById('f_rrReached').value = t.rrReached ?? '';
   document.getElementById('f_h4').value = t.h4 || '';
   document.getElementById('f_h1').value = t.h1 || '';
+  document.getElementById('f_m30').value = t.m30 || '';
   document.getElementById('f_m15').value = t.m15 || '';
-  document.getElementById('f_m5').value = t.m5 || '';
-  document.getElementById('f_m1').value = t.m1 || '';
+  editingLegacyM5 = t.m5 || null;
+  editingLegacyM1 = t.m1 || null;
   document.getElementById('f_lesson').value = t.lesson || '';
   document.getElementById('f_mistake').value = t.mistake || '';
   document.getElementById('f_session').value = t.session || '';
@@ -1237,9 +1247,10 @@ form.addEventListener('submit', async (e)=>{
       grade: state.grade.value,
       h4: document.getElementById('f_h4').value,
       h1: document.getElementById('f_h1').value,
+      m30: document.getElementById('f_m30').value,
       m15: document.getElementById('f_m15').value,
-      m5: document.getElementById('f_m5').value,
-      m1: document.getElementById('f_m1').value,
+      m5: editingLegacyM5,
+      m1: editingLegacyM1,
       ruleFollowed: state.ruleFollowed.value,
       goodTrade: state.goodTrade.value,
       lesson: document.getElementById('f_lesson').value,
